@@ -117,6 +117,46 @@ $$;
 revoke all on function public.reactivate_managed_user(text, text, text, text, text) from public;
 grant execute on function public.reactivate_managed_user(text, text, text, text, text) to authenticated;
 
+-- Grava cada atividade em uma única operação no banco compartilhado.
+-- A confirmação retornada pela função impede que a tela informe sucesso
+-- quando a alteração tiver ficado apenas no navegador.
+create or replace function public.sync_activity_record(p_id bigint, p_payload jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  saved_payload jsonb;
+begin
+  if auth.uid() is null then
+    raise exception 'Sessão inválida para sincronizar atividade.';
+  end if;
+
+  if not exists (
+    select 1 from public.profiles where id = auth.uid() and active = true
+  ) then
+    raise exception 'Acesso inativo para sincronizar atividade.';
+  end if;
+
+  insert into public.activity_records (id, payload, created_by, updated_by, updated_at)
+  values (p_id, p_payload, auth.uid(), auth.uid(), now())
+  on conflict (id) do update
+  set payload = excluded.payload,
+      updated_by = auth.uid(),
+      updated_at = now();
+
+  select payload into saved_payload
+  from public.activity_records
+  where id = p_id;
+
+  return saved_payload;
+end;
+$$;
+
+revoke all on function public.sync_activity_record(bigint, jsonb) from public;
+grant execute on function public.sync_activity_record(bigint, jsonb) to authenticated;
+
 -- Reforça leitura e gravação compartilhada das atividades entre usuários autenticados.
 -- A aplicação controla a visibilidade: ADM/Gerente veem tudo; Coordenador vê somente vínculo próprio.
 alter table if exists public.activity_records enable row level security;
