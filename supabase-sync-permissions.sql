@@ -161,6 +161,11 @@ grant execute on function public.sync_activity_record(bigint, jsonb) to authenti
 -- A aplicação controla a visibilidade: ADM/Gerente veem tudo; Coordenador vê somente vínculo próprio.
 alter table if exists public.activity_records enable row level security;
 
+-- Permissões de tabela necessárias para que os perfis autenticados possam
+-- efetivamente gravar pela API. As políticas abaixo definem o que é permitido.
+grant usage on schema public to authenticated;
+grant select, insert, update on table public.activity_records to authenticated;
+
 drop policy if exists "activity_records_select" on public.activity_records;
 create policy "activity_records_select"
 on public.activity_records for select
