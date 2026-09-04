@@ -6,7 +6,7 @@ title Gestao One The One - Aplicativo local
 set "PORT=4173"
 set "URL=http://127.0.0.1:%PORT%/index.html"
 set "PROJECT_DIR=%CD%"
-set "PYTHON_CMD="
+set "PYTHON_EXE="
 set "GIT_CMD="
 
 echo.
@@ -43,14 +43,13 @@ echo.
 echo Nao foi possivel buscar atualizacoes agora. A versao local sera aberta sem apagar nenhum arquivo.
 
 :find_python
-rem Procura Python no PATH e tambem nas instalacoes comuns deste computador.
-where py >nul 2>nul && set "PYTHON_CMD=py -3"
-if not defined PYTHON_CMD where python >nul 2>nul && set "PYTHON_CMD=python"
-if not defined PYTHON_CMD if exist "%LOCALAPPDATA%\python-portable\python\python.exe" set "PYTHON_CMD="%LOCALAPPDATA%\python-portable\python\python.exe""
-if not defined PYTHON_CMD if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" set "PYTHON_CMD="%LOCALAPPDATA%\Programs\Python\Python313\python.exe""
-if not defined PYTHON_CMD if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" set "PYTHON_CMD="%LOCALAPPDATA%\Programs\Python\Python312\python.exe""
+rem Procura Python nas instalacoes comuns deste computador antes de consultar o PATH.
+if exist "%LOCALAPPDATA%\python-portable\python\python.exe" set "PYTHON_EXE=%LOCALAPPDATA%\python-portable\python\python.exe"
+if not defined PYTHON_EXE if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" set "PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
+if not defined PYTHON_EXE if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" set "PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+if not defined PYTHON_EXE for /f "delims=" %%P in ('where python 2^>nul') do if not defined PYTHON_EXE set "PYTHON_EXE=%%P"
 
-if not defined PYTHON_CMD (
+if not defined PYTHON_EXE (
   echo.
   echo Python nao foi localizado. Me envie esta tela para eu ajustar o caminho correto.
   pause
@@ -63,10 +62,18 @@ findstr /c:"PORT_IN_USE" "%TEMP%\g11_port_check.txt" >nul 2>nul
 if %errorlevel%==0 (
   echo Servidor local ja esta em execucao. Vou aproveitar esta sessao.
 ) else (
-  start "Gestao One The One - Servidor local" /min cmd /k "pushd ""%PROJECT_DIR%"" ^&^& %PYTHON_CMD% -m http.server %PORT% --bind 127.0.0.1"
+  start "Gestao One The One - Servidor local" /min "%PYTHON_EXE%" -m http.server %PORT% --bind 127.0.0.1 --directory "%PROJECT_DIR%"
 )
 
 timeout /t 2 /nobreak >nul
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $c = Get-NetTCPConnection -LocalPort %PORT% -State Listen -ErrorAction SilentlyContinue; if ($c) { 'PORT_IN_USE' } } catch {}" > "%TEMP%\g11_port_check.txt"
+findstr /c:"PORT_IN_USE" "%TEMP%\g11_port_check.txt" >nul 2>nul
+if not %errorlevel%==0 (
+  echo.
+  echo O servidor local nao iniciou. Feche esta janela e me envie esta mensagem para eu ajustar.
+  pause
+  exit /b 1
+)
 for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMddHHmmss"') do set "STAMP=%%i"
 set "CLEAN_URL=%URL%?local=1^&v=%STAMP%"
 
